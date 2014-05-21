@@ -22,9 +22,12 @@ Readonly::Scalar our $COLON => decode_utf8(<<'END');
  ██ 
     
 END
+Readonly::Scalar our $HEIGHT => 5;
+Readonly::Scalar our $WIDTH_BASE => 32;
+Readonly::Scalar our $WIDTH_SEC => 52;
 
 # Version.
-our $VERSION = 0.01;
+our $VERSION = 0.02;
 
 # Constructor.
 sub new {
@@ -40,18 +43,18 @@ sub new {
 	);
 
 	# Width and height.
-	$args{'-height'} = height_by_windowscrheight(5, %args);
+	$args{'-height'} = height_by_windowscrheight($HEIGHT, %args);
 	if ($args{'-second'}) {
-		$args{'-width'} = width_by_windowscrwidth(52, %args);
+		$args{'-width'} = width_by_windowscrwidth($WIDTH_SEC, %args);
 	} else {
-		$args{'-width'} = width_by_windowscrwidth(32, %args);
+		$args{'-width'} = width_by_windowscrwidth($WIDTH_BASE, %args);
 	}
 
 	# Create the widget.
 	my $self = $class->SUPER::new(%args);
 
 	# Parse time.
-	my ($sec, $min, $hour) = map { sprintf '%02d', $_ } localtime($args{'-time'});
+	my ($sec, $min, $hour) = map { sprintf '%02d', $_ } localtime $args{'-time'};
 
 	# Widgets.
 	$self->add(
@@ -141,7 +144,7 @@ sub time {
 	if (defined $time) {
 		$self->{'-time'} = $time;
 		my ($sec, $min, $hour) = map { sprintf '%02d', $_ }
-			localtime($time);
+			localtime $time;
 		$self->getobj('hour1')->num(substr $hour, 0, 1);
 		$self->getobj('hour2')->num(substr $hour, 1, 1);
 		$self->getobj('min1')->num(substr $min, 0, 1);
@@ -155,6 +158,8 @@ sub time {
 }
 
 1;
+
+__END__
 
 =pod
 
@@ -360,6 +365,6 @@ To Czech Perl Workshop 2014 and their organizers.
 
 =head1 VERSION
 
-0.01
+0.02
 
 =cut
