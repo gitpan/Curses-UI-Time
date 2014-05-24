@@ -22,12 +22,19 @@ Readonly::Scalar our $COLON => decode_utf8(<<'END');
  ██ 
     
 END
-Readonly::Scalar our $HEIGHT => 5;
+Readonly::Scalar our $DASH => q{-};
+Readonly::Scalar our $HEIGHT_BASE => 5;
+Readonly::Scalar our $HEIGHT_DATE => 7;
+Readonly::Scalar our $YEAR_ADD => 1900;
 Readonly::Scalar our $WIDTH_BASE => 32;
+Readonly::Scalar our $WIDTH_COLON => 4;
+Readonly::Scalar our $WIDTH_DATE => 10;
+Readonly::Scalar our $WIDTH_NUM => 6;
 Readonly::Scalar our $WIDTH_SEC => 52;
+Readonly::Scalar our $WIDTH_SPACE => 1;
 
 # Version.
-our $VERSION = 0.02;
+our $VERSION = 0.03;
 
 # Constructor.
 sub new {
@@ -35,6 +42,7 @@ sub new {
 	keys_to_lowercase(\%userargs);
 	my %args = (
 		'-colon' => 1,
+		'-date' => 0,
 		'-fg' => -1,
 		'-time' => time,
 		'-second' => 0,
@@ -43,7 +51,13 @@ sub new {
 	);
 
 	# Width and height.
-	$args{'-height'} = height_by_windowscrheight($HEIGHT, %args);
+	if ($args{'-date'}) {
+		$args{'-height'} = height_by_windowscrheight($HEIGHT_DATE,
+			%args);
+	} else {
+		$args{'-height'} = height_by_windowscrheight($HEIGHT_BASE,
+			%args);
+	}
 	if ($args{'-second'}) {
 		$args{'-width'} = width_by_windowscrwidth($WIDTH_SEC, %args);
 	} else {
@@ -54,59 +68,77 @@ sub new {
 	my $self = $class->SUPER::new(%args);
 
 	# Parse time.
-	my ($sec, $min, $hour) = map { sprintf '%02d', $_ } localtime $args{'-time'};
+	my ($sec, $min, $hour, $day, $mon, $year) = $self->_localtime($self->{'-time'});
 
 	# Widgets.
+	my $x = 0;
 	$self->add(
 		'hour1', 'Curses::UI::Number',
-		'-fg' => $args{'-fg'},
+		'-fg' => $self->{'-fg'},
 		'-num' => (substr $hour, 0, 1),
-		'-x' => 0,
+		'-x' => $x,
 	);
+	$x += $WIDTH_NUM + $WIDTH_SPACE;
 	$self->add(
 		'hour2', 'Curses::UI::Number',
-		'-fg' => $args{'-fg'},
+		'-fg' => $self->{'-fg'},
 		'-num' => (substr $hour, 1, 1),
-		'-x' => 7,
+		'-x' => $x,
 	);
+	$x += $WIDTH_NUM + $WIDTH_SPACE;
 	$self->add(
 		'colon1', 'Label',
-		'-fg' => $args{'-fg'},
+		'-fg' => $self->{'-fg'},
 		'-hidden' => ! $self->{'-colon'},
 		'-text' => $COLON,
-		'-x' => 14,
+		'-x' => $x,
 	);
+	$x += $WIDTH_COLON + $WIDTH_SPACE;
 	$self->add(
 		'min1', 'Curses::UI::Number',
-		'-fg' => $args{'-fg'},
+		'-fg' => $self->{'-fg'},
 		'-num' => (substr $min, 0, 1),
-		'-x' => 19,
+		'-x' => $x,
 	);
+	$x += $WIDTH_NUM + $WIDTH_SPACE;
 	$self->add(
 		'min2', 'Curses::UI::Number',
-		'-fg' => $args{'-fg'},
+		'-fg' => $self->{'-fg'},
 		'-num' => (substr $min, 1, 1),
-		'-x' => 26,
+		'-x' => $x,
 	);
 	if ($self->{'-second'}) {
+		$x += $WIDTH_NUM + $WIDTH_SPACE;
 		$self->add(
 			'colon2', 'Label',
-			'-fg' => $args{'-fg'},
+			'-fg' => $self->{'-fg'},
 			'-hidden' => ! $self->{'-colon'},
 			'-text' => $COLON,
-			'-x' => 33,
+			'-x' => $x,
 		);
+		$x += $WIDTH_COLON + $WIDTH_SPACE;
 		$self->add(
 			'sec1', 'Curses::UI::Number',
-			'-fg' => $args{'-fg'},
+			'-fg' => $self->{'-fg'},
 			'-num' => (substr $sec, 0, 1),
-			'-x' => 38,
+			'-x' => $x,
 		);
+		$x += $WIDTH_NUM + $WIDTH_SPACE;
 		$self->add(
 			'sec2', 'Curses::UI::Number',
-			'-fg' => $args{'-fg'},
+			'-fg' => $self->{'-fg'},
 			'-num' => (substr $sec, 1, 1),
-			'-x' => 45,
+			'-x' => $x,
+		);
+	}
+	if ($self->{'-date'}) {
+		my $date_x = ($self->width - $WIDTH_DATE) / 2;
+		$self->add(
+			'date', 'Label',
+			'-text' => (join $DASH, $year, $mon, $day),
+			'-fg' => $self->{'-fg'},
+			'-x' => $date_x,
+			'-y' => $HEIGHT_DATE - 1,
 		);
 	}
 
@@ -143,8 +175,8 @@ sub time {
 	my ($self, $time) = @_;
 	if (defined $time) {
 		$self->{'-time'} = $time;
-		my ($sec, $min, $hour) = map { sprintf '%02d', $_ }
-			localtime $time;
+		my ($sec, $min, $hour, $day, $mon, $year)
+			= $self->_localtime($time);
 		$self->getobj('hour1')->num(substr $hour, 0, 1);
 		$self->getobj('hour2')->num(substr $hour, 1, 1);
 		$self->getobj('min1')->num(substr $min, 0, 1);
@@ -153,8 +185,25 @@ sub time {
 			$self->getobj('sec1')->num(substr $sec, 0, 1);
 			$self->getobj('sec2')->num(substr $sec, 1, 1);
 		}
+		if ($self->{'-date'}) {
+			$self->getobj('date')->text(join $DASH, $year, $mon,
+				$day);
+		}
 	}
 	return $self->{'-time'};
+}
+
+# Get prepared time and date fields.
+sub _localtime {
+	my ($self, $time) = @_;
+	my ($sec, $min, $hour, $day, $mon, $year) = localtime $time;
+	$sec = sprintf '%02d', $sec;
+	$min = sprintf '%02d', $min;
+	$hour = sprintf '%02d', $hour;
+	$day = sprintf '%02d', $day;
+	$mon = sprintf '%02d', ($mon + 1);
+	$year = sprintf '%04d', ($year + $YEAR_ADD);
+	return ($sec, $min, $hour, $day, $mon, $year);
 }
 
 1;
@@ -214,6 +263,11 @@ L<Curses::UI::Widget|Curses::UI::Widget>.
  View colon flag.
  Default value is '1'.
 
+=item * C<-date> < DATE_FLAG >
+
+ View date flag.
+ Default value is 0.
+
 =item * C<-fg> < CHARACTER >
 
  Foreground color.
@@ -256,7 +310,7 @@ L<Curses::UI::Widget|Curses::UI::Widget>.
 
 =item * C<time()>
 
- Get or set time.
+ Get or set time (and date with -date => 1).
  Returns time in seconds.
 
 =back
@@ -330,6 +384,49 @@ L<Curses::UI::Widget|Curses::UI::Widget>.
  # Loop.
  $cui->mainloop;
 
+=head1 EXAMPLE3
+
+ # Pragmas.
+ use strict;
+ use warnings;
+
+ # Modules.
+ use Curses::UI;
+
+ # Object.
+ my $cui = Curses::UI->new(
+         -color_support => 1,
+ );
+ 
+ # Main window.
+ my $win = $cui->add('window_id', 'Window');
+
+ # Add time.
+ my $time = $win->add(
+         undef, 'Curses::UI::Time',
+         '-border' => 1,
+         '-date' => 1,
+         '-second' => 1,
+         '-time' => time,
+ );
+ 
+ # Binding for quit.
+ $win->set_binding(\&exit, "\cQ", "\cC");
+
+ # Timer.
+ $cui->set_timer(
+         'timer',
+         sub {
+                 $time->time(time);
+                 $cui->draw(1);
+                 return;
+         },
+         1,
+ );
+ 
+ # Loop.
+ $cui->mainloop;
+
 =head1 DEPENDENCIES
 
 L<Curses>,
@@ -363,8 +460,10 @@ BSD license.
 
 To Czech Perl Workshop 2014 and their organizers.
 
+tty-clock program.
+
 =head1 VERSION
 
-0.02
+0.03
 
 =cut
